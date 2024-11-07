@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any, Callable
+
 
 class GFloat:
     grad_funcs = {
@@ -18,11 +20,14 @@ class GFloat:
     def __init__(
         self, val: float, is_updateable: bool = True, name: str | None = None
     ) -> None:
-        self.val = val
+        if not isinstance(val, (float, int)):
+            raise ValueError(f"Expected float or int, got {type(val)}")
+        self.val = float(val)
         self.is_updateable = is_updateable
         self.name = name
 
         self._grad = None
+        self._is_output = False
 
         self.downstream_data = []
         self.upstream_floats = []
@@ -36,11 +41,12 @@ class GFloat:
         return [relation for _, relation, *_ in self.downstream_data]
 
     @property
-    def all_upstream_floats(self) -> list[GFloat]:
-        upstream_floats = self.upstream_floats.copy()
-        for gfloat in self.upstream_floats:
-            upstream_floats += gfloat.all_upstream_floats
-        return list(upstream_floats)
+    def all_upstream_floats(self) -> set[GFloat]:
+        upstream_floats = set(self.upstream_floats)
+        upstream_floats_copy = upstream_floats.copy()
+        for gfloat in upstream_floats:
+            upstream_floats_copy |= gfloat.all_upstream_floats
+        return upstream_floats_copy
 
     @property
     def grad(self) -> float | None:
@@ -56,19 +62,28 @@ class GFloat:
 
     def set_is_output(self) -> None:
         self.grad = 1.0
+        self._is_output = True
+
+        if any(gf._is_output for gf in self.all_upstream_floats):
+            raise RuntimeWarning(
+                "Multiple outputs detected, only the final output (i.e. the loss) "
+                "should be set as output"
+            )
 
     def clear_grad(self) -> None:
         self._grad = None
+
+    def clear_downstream_data(self) -> None:
         self.downstream_data = []
 
-    def _grad_fn(
-        self, downstream_var: GFloat, relation: str, other: GFloat | float | int
-    ) -> float:
+    def _grad_fn(self, downstream_var: GFloat, relation: str, other: Any) -> float:
         if downstream_var not in self.downstream_floats:
             raise RuntimeError("Variable not downstream")
 
         return self.grad_funcs[relation](
-            float(self), float(downstream_var), float(other)
+            float(self),
+            float(downstream_var),
+            float(other) if isinstance(other, (GFloat, float, int)) else other,
         )
 
     def calculate_grad(self) -> float:
@@ -82,27 +97,59 @@ class GFloat:
             )
         return grad
 
-    def update(self, lr: float, clear_grad=True) -> None:
-        if not self.is_updateable:
-            return
-
-        self.val = self.val - lr * self.grad
+    def update(self, lr: float, clear_grad=True, clear_downstream_data=True) -> None:
+        if self.is_updateable:
+            self.val = self.val - lr * self.grad
 
         if clear_grad:
             self.clear_grad()
 
-    def _math_method(self, other: GFloat | float, func, name) -> GFloat:
+        if clear_downstream_data:
+            self.clear_downstream_data()
+
+    def update_full_network(
+        self, lr: float, clear_grad=True, clear_downstream_data=True
+    ) -> None:
+        self.set_is_output()
+
+        for gfloat in self.all_upstream_floats:
+            gfloat.update(lr=lr, clear_grad=False, clear_downstream_data=False)
+
+        if clear_grad:
+            self.clear_grad_full_network()
+
+        if clear_downstream_data:
+            self.clear_downstream_data_full_network()
+
+    def clear_grad_full_network(self) -> None:
+        for gfloat in self.all_upstream_floats:
+            gfloat.clear_grad()
+
+    def clear_downstream_data_full_network(self) -> None:
+        for gfloat in self.all_upstream_floats:
+            gfloat.clear_downstream_data()
+
+    def _math_method(self, other: GFloat | float, func, method_name) -> GFloat:
         if self is other:
             raise NotImplementedError
 
-        result = GFloat(func(self.val, float(other)), is_updateable=False)
+        result = GFloat(
+            val=func(self.val, float(other)),
+            is_updateable=False,
+            name=f"{self.name}_{method_name}",
+        )
 
         if isinstance(other, GFloat):
-            name_ = name[1:] if name.startswith("r") else f"r{name}"
+            name_ = (
+                method_name[1:] if method_name.startswith("r") else f"r{method_name}"
+            )
             other.downstream_data.append((result, name_, self))
             result.upstream_floats.append(other)
+            result.name = result.name + f"_{other.name}"
+        else:
+            result.name = result.name + f"_{other}"
 
-        self.downstream_data.append((result, name, other))
+        self.downstream_data.append((result, method_name, other))
         result.upstream_floats.append(self)
         return result
 
@@ -113,7 +160,7 @@ class GFloat:
         return self._math_method(other, lambda x, y: x + y, "add")
 
     def __radd__(self, other: GFloat | float) -> GFloat:
-        return self.__add__(other)
+        return self._math_method(other, lambda x, y: x + y, "radd")
 
     def __sub__(self, other: GFloat | float) -> GFloat:
         return self._math_method(other, lambda x, y: x - y, "sub")
@@ -125,7 +172,7 @@ class GFloat:
         return self._math_method(other, lambda x, y: x * y, "mul")
 
     def __rmul__(self, other: GFloat | float) -> GFloat:
-        return self.__mul__(other)
+        return self._math_method(other, lambda x, y: x * y, "rmul")
 
     def __truediv__(self, other: GFloat | float) -> GFloat:
         return self._math_method(other, lambda x, y: x / y, "div")
@@ -133,9 +180,9 @@ class GFloat:
     def __rtruediv__(self, other: GFloat | float) -> GFloat:
         return self._math_method(other, lambda x, y: y / x, "rdiv")
 
-    def __pow__(self, other: GFloat | float) -> GFloat:
-        if isinstance(other, GFloat) or not isinstance(other, (int)):
-            raise NotImplementedError
+    def __pow__(self, other: int | float) -> GFloat:
+        if not isinstance(other, int) and not other.is_integer():
+            raise NotImplementedError(f"{self=}, {other=}")
         return self._math_method(other, lambda x, y: x**y, "pow")
 
     def __rpow__(self, other: GFloat | float) -> GFloat:
@@ -145,3 +192,16 @@ class GFloat:
         return (
             f"GFloat({self.val}, is_updateable={self.is_updateable}, name={self.name})"
         )
+
+    def applyfunc(self, func, grad_func: Callable | None = None) -> GFloat:
+        result = GFloat(
+            val=func(self.val),
+            is_updateable=False,
+            name=f"{self.name}_applyfunc_{func.__name__}",
+        )
+        self.downstream_data.append((result, func.__name__, func))
+        result.upstream_floats.append(self)
+
+        if grad_func is not None:
+            self.grad_funcs[func.__name__] = grad_func
+        return result
