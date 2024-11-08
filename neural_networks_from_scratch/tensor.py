@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pprint
-from typing import Any, Callable
+from typing import Callable
 
 from gradient_float import GFloat
 
@@ -218,10 +218,15 @@ class GTensor:
             )
         )
 
-    def applyfunc(self, func: Callable, **kwargs) -> GTensor:
+    def applyfunc(
+        self, func: Callable, func_name: str | None = None, **kwargs
+    ) -> GTensor:
+        func_name = func_name or func.__name__
         return GTensor(
-            values=_elementwise_method_tensors(self.values, func, **kwargs),
-            name=f"{self.name}_applyfunc_{func.__name__}",
+            values=_elementwise_method_tensors(
+                self.values, func, func_name=func_name, **kwargs
+            ),
+            name=f"{self.name}_applyfunc_{func_name}",
         )
 
     def _elementwise_method(

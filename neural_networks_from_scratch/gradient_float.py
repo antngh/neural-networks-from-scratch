@@ -20,17 +20,37 @@ class GFloat:
     def __init__(
         self, val: float, is_updateable: bool = True, name: str | None = None
     ) -> None:
+        if val != val:
+            raise ValueError("NaNs aren't valid")
+
         if not isinstance(val, (float, int)):
             raise ValueError(f"Expected float or int, got {type(val)}")
         self.val = float(val)
         self.is_updateable = is_updateable
         self.name = name
+        self.track_gradients = True
 
         self._grad = None
         self._is_output = False
 
-        self.downstream_data = []
-        self.upstream_floats = []
+        self._downstream_data = []
+        self._upstream_floats = []
+
+    @property
+    def downstream_data(self) -> list[tuple[GFloat, str, Any]]:
+        return self._downstream_data if self.track_gradients else []
+
+    @downstream_data.setter
+    def downstream_data(self, value: list[tuple[GFloat, str, Any]]) -> None:
+        self._downstream_data = value
+
+    @property
+    def upstream_floats(self) -> list[GFloat]:
+        return self._upstream_floats if self.track_gradients else []
+
+    @upstream_floats.setter
+    def upstream_floats(self, value: list[GFloat]) -> None:
+        self._upstream_floats = value
 
     @property
     def downstream_floats(self) -> list[tuple[GFloat, str]]:
@@ -110,7 +130,8 @@ class GFloat:
     def update_full_network(
         self, lr: float, clear_grad=True, clear_downstream_data=True
     ) -> None:
-        self.set_is_output()
+        if not self._is_output:
+            raise RuntimeError("Only the output can be used to update the network")
 
         for gfloat in self.all_upstream_floats:
             gfloat.update(lr=lr, clear_grad=False, clear_downstream_data=False)
@@ -128,6 +149,13 @@ class GFloat:
     def clear_downstream_data_full_network(self) -> None:
         for gfloat in self.all_upstream_floats:
             gfloat.clear_downstream_data()
+
+    def set_track_gradients_full_network(self, track_gradients: bool) -> None:
+        if not self._is_output:
+            raise RuntimeError("Only the output can be used to update the network")
+
+        for gfloat in self.all_upstream_floats:
+            gfloat.track_gradients = track_gradients
 
     def _math_method(self, other: GFloat | float, func, method_name) -> GFloat:
         if self is other:
@@ -193,15 +221,19 @@ class GFloat:
             f"GFloat({self.val}, is_updateable={self.is_updateable}, name={self.name})"
         )
 
-    def applyfunc(self, func, grad_func: Callable | None = None) -> GFloat:
+    def applyfunc(
+        self, func, func_name: str | None = None, grad_func: Callable | None = None
+    ) -> GFloat:
+        func_name = func_name or func.__name__
         result = GFloat(
             val=func(self.val),
             is_updateable=False,
-            name=f"{self.name}_applyfunc_{func.__name__}",
+            name=f"{self.name}_applyfunc_{func_name}",
         )
-        self.downstream_data.append((result, func.__name__, func))
+        self.downstream_data.append((result, func_name, func))
         result.upstream_floats.append(self)
 
         if grad_func is not None:
-            self.grad_funcs[func.__name__] = grad_func
+            self.grad_funcs[func_name] = grad_func
+        return result
         return result
