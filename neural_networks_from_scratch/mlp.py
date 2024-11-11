@@ -1,7 +1,7 @@
 import random
 from typing import Callable
 
-from activation_functions import ActivationBase, Linear, Relu
+from activation_functions import ActivationBase, Relu
 from tensor import GTensor
 
 
@@ -10,14 +10,14 @@ class MLP:
         self,
         n_inputs: int,
         layers: tuple[int, ...],
-        is_updateable: bool = True,
+        is_updatable: bool = True,
         name: str | None = None,
         weight_initialiser: Callable | None = None,
         internal_activation_function: ActivationBase | None = Relu(),
         final_activation_function: ActivationBase | None = None,
     ):
         self.name = name
-        self.is_updateable = is_updateable
+        self.is_updatable = is_updatable
 
         self.n_inputs = n_inputs
         self.layers = layers
@@ -43,7 +43,7 @@ class MLP:
                     dims=(n_nodes_layer, n_nodes_previous_layer),
                     initial_value=self.weight_value_initialiser,
                     name=f"{self.name}_W{i}",
-                    is_updateable=self.is_updateable,
+                    is_updatable=self.is_updatable,
                 )
             )
             self.biases.append(
@@ -51,7 +51,7 @@ class MLP:
                     dims=(n_nodes_layer,),
                     initial_value=self.weight_value_initialiser,
                     name=f"{self.name}_B{i}",
-                    is_updateable=self.is_updateable,
+                    is_updatable=self.is_updatable,
                 )
             )
             n_nodes_previous_layer = n_nodes_layer
@@ -82,3 +82,6 @@ class MLP:
                 )
             output_data.append(output)
         return output_data
+
+    def set_track_gradients_full_network(self, track_gradients: bool) -> None:
+        self.weights[-1].set_track_gradients_full_network(track_gradients)

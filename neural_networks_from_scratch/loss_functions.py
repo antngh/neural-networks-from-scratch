@@ -1,4 +1,4 @@
-from gradient_float import GFloat
+from gradient_tracking.gradient_float import GFloat
 from tensor import GTensor
 
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import pprint
 from typing import Callable
 
-from gradient_float import GFloat
+from gradient_tracking.gradient_float import GFloat
 
 
 def _get_dims_from_nested_list(values: list) -> tuple[int, ...]:
@@ -144,7 +144,7 @@ class GTensor:
         values: list[float, GFloat | list] | None = None,
         dims: tuple[int, ...] | None = None,
         initial_value: float | Callable | None = None,
-        is_updateable: bool | None = None,
+        is_updatable: bool | None = None,
         name: str | None = None,
     ) -> None:
         self.name = name
@@ -169,17 +169,17 @@ class GTensor:
             )
 
         if _is_tensor_of_gfloats(values):
-            if is_updateable:
+            if is_updatable:
                 raise ValueError(
-                    "if values are GFloats, is_updateable must not be provided"
+                    "if values are GFloats, is_updatable must not be provided"
                 )
             self.values = values
             return
 
-        self.is_updateable = True if is_updateable is None else is_updateable
+        self.is_updatable = True if is_updatable is None else is_updatable
         self.values = _float_tensor_to_tensor_of_gfloats(
             values,
-            is_updateable=self.is_updateable,
+            is_updatable=self.is_updatable,
             name=name,
         )
 
@@ -203,14 +203,14 @@ class GTensor:
         return (
             GTensor(
                 values=other,
-                is_updateable=False,
+                is_updatable=False,
                 name=f"{self.name}_{method_name}_other",
             )
             if isinstance(other, list)
             else (
                 GFloat(
                     val=other,
-                    is_updateable=False,
+                    is_updatable=False,
                     name=f"{self.name}_{method_name}_other",
                 )
                 if isinstance(other, float)
@@ -328,7 +328,7 @@ class GTensor:
         return f"GTensor(name={self.name}, dims={self.dims},\nvalues=\n{vals_str}\n)"
 
     def update(self, lr: float, clear_grad=True, clear_downstream_data=True) -> None:
-        if not self.is_updateable:
+        if not self.is_updatable:
             return
 
         for el in _get_all_elements(self.values):
@@ -353,3 +353,8 @@ class GTensor:
             raise ValueError("Only scalar tensors can be converted to GFloat")
 
         return self.values[0]
+
+    def set_track_gradients_full_network(self, track_gradients: bool) -> None:
+        list(_get_all_elements(self.values))[0].set_track_gradients_full_network(
+            track_gradients
+        )
