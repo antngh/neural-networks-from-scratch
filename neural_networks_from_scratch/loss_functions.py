@@ -1,5 +1,5 @@
-from gradient_tracking.gradient_float import GFloat
-from tensor import GTensor
+from neural_networks_from_scratch.gradient_tracking.gradient_float import GFloat
+from neural_networks_from_scratch.tensor import GTensor
 
 
 def mean_squared_error(

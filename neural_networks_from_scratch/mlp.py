@@ -1,8 +1,8 @@
 import random
 from typing import Callable
 
-from activation_functions import ActivationBase, Relu
-from tensor import GTensor
+from neural_networks_from_scratch.activation_functions import ActivationBase, Relu
+from neural_networks_from_scratch.tensor import GTensor
 
 
 class MLP:
@@ -84,4 +84,5 @@ class MLP:
         return output_data
 
     def set_track_gradients_full_network(self, track_gradients: bool) -> None:
+        self.weights[-1].set_track_gradients_full_network(track_gradients)
         self.weights[-1].set_track_gradients_full_network(track_gradients)
