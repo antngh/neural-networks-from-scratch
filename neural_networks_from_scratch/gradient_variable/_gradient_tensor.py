@@ -3,14 +3,14 @@ from __future__ import annotations
 import pprint
 from typing import Callable
 
-from gradient_tracking.gradient_float import GFloat
+from ._gradient_variable import GradientVariable
 
 
 def _get_dims_from_nested_list(values: list) -> tuple[int, ...]:
     is_numeric = None
     list_lengths = set()
     for entry in values:
-        if isinstance(entry, (float, int, GFloat)):
+        if isinstance(entry, (float, int, GradientVariable)):
             if is_numeric is None:
                 is_numeric = True
             elif not is_numeric:
@@ -43,7 +43,7 @@ def _create_tensor_from_dims(
 
 
 def _get_all_elements(values):
-    if isinstance(values, (float, int, GFloat)):
+    if isinstance(values, (float, int, GradientVariable)):
         return values
 
     chained_vals = set()
@@ -57,27 +57,27 @@ def _get_all_elements(values):
     return chained_vals
 
 
-def _is_tensor_of_gfloats(values):
-    return all(isinstance(el, GFloat) for el in _get_all_elements(values))
+def _is_tensor_of_gvars(values):
+    return all(isinstance(el, GradientVariable) for el in _get_all_elements(values))
 
 
-def _float_tensor_to_tensor_of_gfloats(
+def _float_tensor_to_tensor_of_gvars(
     values: list | float | int,
     name=None,
     level="i",
     # index=0,
     **kwargs,
-) -> GFloat:
+) -> GradientVariable:
     name = name or ""
     if isinstance(values, (float, int)):
-        return GFloat(
+        return GradientVariable(
             float(values),
             name=name,
             **kwargs,
         )
 
     return [
-        _float_tensor_to_tensor_of_gfloats(
+        _float_tensor_to_tensor_of_gvars(
             list_,
             name=name + f"{level}{index_}",
             level=chr(ord(level) + 1),
@@ -89,7 +89,7 @@ def _float_tensor_to_tensor_of_gfloats(
 
 
 def _is_scalar(values):
-    if isinstance(values, (float, int, GFloat)):
+    if isinstance(values, (float, int, GradientVariable)):
         return True
     return False
 
@@ -115,7 +115,7 @@ def _check_dimensions_align(values1, values2):
 def _elementwise_method_tensors(values, func, **kwargs):
     if isinstance(values, (float, int)):
         return func(values, **kwargs)
-    elif isinstance(values, GFloat):
+    elif isinstance(values, GradientVariable):
         return values.applyfunc(func, **kwargs)
 
     return [_elementwise_method_tensors(v, func, **kwargs) for v in values]
@@ -126,8 +126,8 @@ def _elementwise_method_two_tensors(values1, values2, func):
         values1, values2
     ), f"Dimensions must match {values1=} {values2=}"
 
-    if isinstance(values1, (float, int, GFloat)) and isinstance(
-        values2, (float, int, GFloat)
+    if isinstance(values1, (float, int, GradientVariable)) and isinstance(
+        values2, (float, int, GradientVariable)
     ):
         return func(values1, values2)
 
@@ -137,11 +137,11 @@ def _elementwise_method_two_tensors(values1, values2, func):
     ]
 
 
-class GTensor:
+class GradientTensor:
 
     def __init__(
         self,
-        values: list[float, GFloat | list] | None = None,
+        values: list[float, GradientVariable | list] | None = None,
         dims: tuple[int, ...] | None = None,
         initial_value: float | Callable | None = None,
         is_updatable: bool | None = None,
@@ -168,22 +168,22 @@ class GTensor:
                 dims, value=0.0 if initial_value is None else initial_value
             )
 
-        if _is_tensor_of_gfloats(values):
+        if _is_tensor_of_gvars(values):
             if is_updatable:
                 raise ValueError(
-                    "if values are GFloats, is_updatable must not be provided"
+                    "if values are GradientVariables, is_updatable must not be provided"
                 )
             self.values = values
             return
 
         self.is_updatable = True if is_updatable is None else is_updatable
-        self.values = _float_tensor_to_tensor_of_gfloats(
+        self.values = _float_tensor_to_tensor_of_gvars(
             values,
             is_updatable=self.is_updatable,
             name=name,
         )
 
-    def transpose(self) -> GTensor:
+    def transpose(self) -> GradientTensor:
         if len(self.dims) != 2:
             raise ValueError("Transpose only supported for 2D tensors")
 
@@ -194,21 +194,23 @@ class GTensor:
                 row.append(self.values[i][j])
             new_values.append(row)
 
-        return GTensor(
+        return GradientTensor(
             values=new_values,
             name=f"{self.name}_transpose",
         )
 
-    def _clean_other_tensor(self, other: GTensor | float, method_name) -> GTensor:
+    def _clean_other_tensor(
+        self, other: GradientTensor | float, method_name
+    ) -> GradientTensor:
         return (
-            GTensor(
+            GradientTensor(
                 values=other,
                 is_updatable=False,
                 name=f"{self.name}_{method_name}_other",
             )
             if isinstance(other, list)
             else (
-                GFloat(
+                GradientVariable(
                     val=other,
                     is_updatable=False,
                     name=f"{self.name}_{method_name}_other",
@@ -220,9 +222,9 @@ class GTensor:
 
     def applyfunc(
         self, func: Callable, func_name: str | None = None, **kwargs
-    ) -> GTensor:
+    ) -> GradientTensor:
         func_name = func_name or func.__name__
-        return GTensor(
+        return GradientTensor(
             values=_elementwise_method_tensors(
                 self.values, func, func_name=func_name, **kwargs
             ),
@@ -230,51 +232,51 @@ class GTensor:
         )
 
     def _elementwise_method(
-        self, other: GTensor | float, func, method_name=None
-    ) -> GTensor:
+        self, other: GradientTensor | float, func, method_name=None
+    ) -> GradientTensor:
         other = self._clean_other_tensor(other, method_name)
 
-        other_dims = other.dims if isinstance(other, GTensor) else ()
-        other_values = other.values if isinstance(other, GTensor) else other
+        other_dims = other.dims if isinstance(other, GradientTensor) else ()
+        other_values = other.values if isinstance(other, GradientTensor) else other
 
         if self.dims != other_dims and other_dims != ():
             raise ValueError("Dimensions must match")
 
-        return GTensor(
+        return GradientTensor(
             values=_elementwise_method_two_tensors(
                 self.values, other_values, lambda x, y: func(x, y)
             ),
             name=f"{self.name}_{method_name}_{other.name}",
         )
 
-    def __add__(self, other: GTensor | float) -> GTensor:
+    def __add__(self, other: GradientTensor | float) -> GradientTensor:
         return self._elementwise_method(other, lambda x, y: x + y, method_name="add")
 
-    def __radd__(self, other: GTensor | float) -> GTensor:
+    def __radd__(self, other: GradientTensor | float) -> GradientTensor:
         return self._elementwise_method(other, lambda x, y: x + y, method_name="radd")
 
-    def __sub__(self, other: GTensor | float) -> GTensor:
+    def __sub__(self, other: GradientTensor | float) -> GradientTensor:
         return self._elementwise_method(other, lambda x, y: x - y, method_name="sub")
 
-    def __rsub__(self, other: GTensor | float) -> GTensor:
+    def __rsub__(self, other: GradientTensor | float) -> GradientTensor:
         return self._elementwise_method(other, lambda x, y: y - x, method_name="rsub")
 
-    def __mul__(self, other: GTensor | float) -> GTensor:
+    def __mul__(self, other: GradientTensor | float) -> GradientTensor:
         if not isinstance(other, float):
             raise ValueError("* only used for elementwise multiplication")
 
         return self._elementwise_method(other, lambda x, y: x * y, method_name="elmul")
 
-    def __rmul__(self, other: GTensor | float) -> GTensor:
+    def __rmul__(self, other: GradientTensor | float) -> GradientTensor:
         if not isinstance(other, float):
             raise ValueError("* only used for elementwise multiplication")
 
         return self._elementwise_method(other, lambda x, y: x * y, method_name="relmul")
 
-    def matmul(self, other: GTensor) -> GTensor:
+    def matmul(self, other: GradientTensor) -> GradientTensor:
         other = self._clean_other_tensor(other, method_name="matmul")
 
-        if not isinstance(other, GTensor):
+        if not isinstance(other, GradientTensor):
             raise ValueError("matmul only supported for tensors")
 
         if len(self.dims) != 2 or len(other.dims) != 2:
@@ -295,15 +297,15 @@ class GTensor:
                 )
             new_values.append(row)
 
-        return GTensor(
+        return GradientTensor(
             values=new_values,
             name=f"{self.name}_matmul_{other.name}",
         )
 
-    def vecmul(self, other: GTensor | list) -> GTensor:
+    def vecmul(self, other: GradientTensor | list) -> GradientTensor:
         other = self._clean_other_tensor(other, method_name="vecmul")
 
-        if not isinstance(other, GTensor):
+        if not isinstance(other, GradientTensor):
             raise ValueError("matmul only supported for tensors")
 
         if len(self.dims) != 2 or len(other.dims) != 1:
@@ -312,7 +314,7 @@ class GTensor:
         if self.dims[1] != other.dims[0]:
             raise ValueError("Dimensions must match for vecmul")
 
-        return GTensor(
+        return GradientTensor(
             values=[
                 sum(
                     self_val * other_val
@@ -348,9 +350,9 @@ class GTensor:
         for el in _get_all_elements(self.values):
             el.clear_downstream_data()
 
-    def to_gfloat(self) -> GTensor:
+    def to_gvariable(self) -> GradientTensor:
         if self.dims != (1,):
-            raise ValueError("Only scalar tensors can be converted to GFloat")
+            raise ValueError("Only scalar tensors can be converted to GVar")
 
         return self.values[0]
 
