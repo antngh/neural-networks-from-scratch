@@ -1,11 +1,42 @@
 import random
+from abc import ABC, abstractmethod
 from typing import Callable
 
 from neural_networks_from_scratch.activation_functions import ActivationBase, Relu
-from neural_networks_from_scratch.tensor import GTensor
+from neural_networks_from_scratch.gradient_variable import GradientVariable
+from neural_networks_from_scratch.tensor import GradientTensor
 
 
-class MLP:
+class GModelBase(ABC):
+    def __init__(
+        self,
+        is_updatable: bool = True,
+        name: str | None = None,
+        weight_initialiser: Callable | None = None,
+    ):
+        self.name = name
+        self.is_updatable = is_updatable
+
+        self.weight_value_initialiser = (
+            weight_initialiser
+            if weight_initialiser is not None
+            else lambda: random.normalvariate(0, 1)
+        )
+
+        self._tracking_gradients = None
+
+        self._create_variables()
+
+    @abstractmethod
+    def _create_variables(self):
+        pass
+
+    @abstractmethod
+    def forward(self, input_data: list | GradientTensor | GradientVariable) -> list:
+        return self._forward_calculation(input_data)
+
+
+class MLP(GModelBase):
     def __init__(
         self,
         n_inputs: int,
@@ -16,30 +47,23 @@ class MLP:
         internal_activation_function: ActivationBase | None = Relu(),
         final_activation_function: ActivationBase | None = None,
     ):
-        self.name = name
-        self.is_updatable = is_updatable
-
         self.n_inputs = n_inputs
         self.layers = layers
 
         self.activation_function = internal_activation_function
         self.final_activation_function = final_activation_function
 
-        self.weight_value_initialiser = (
-            weight_initialiser
-            if weight_initialiser is not None
-            else lambda: random.normalvariate(0, 1)
+        super().__init__(
+            is_updatable=is_updatable, name=name, weight_initialiser=weight_initialiser
         )
 
-        self._create_weights_and_biases()
-
-    def _create_weights_and_biases(self):
+    def _create_variables(self):
         self.weights = []
         self.biases = []
         n_nodes_previous_layer = self.n_inputs
         for i, n_nodes_layer in enumerate(self.layers):
             self.weights.append(
-                GTensor(
+                GradientTensor(
                     dims=(n_nodes_layer, n_nodes_previous_layer),
                     initial_value=self.weight_value_initialiser,
                     name=f"{self.name}_W{i}",
@@ -47,7 +71,7 @@ class MLP:
                 )
             )
             self.biases.append(
-                GTensor(
+                GradientTensor(
                     dims=(n_nodes_layer,),
                     initial_value=self.weight_value_initialiser,
                     name=f"{self.name}_B{i}",
@@ -56,7 +80,7 @@ class MLP:
             )
             n_nodes_previous_layer = n_nodes_layer
 
-    def _activation(self, x: GTensor, final_layer=False) -> GTensor:
+    def _activation(self, x: GradientTensor, final_layer=False) -> GradientTensor:
         activation_function_obj = (
             self.final_activation_function if final_layer else self.activation_function
         )
@@ -69,8 +93,9 @@ class MLP:
             grad_func=activation_function_obj.grad,
         )
 
-    def forward(self, input_data: list | GTensor) -> list[GTensor]:
+    def forward(self, input_data: list | GradientTensor) -> list:
         output_data = []
+        input_data = input_data if isinstance(input_data, list) else input_data.values
         for row in input_data:
             output = row
             for layer_index, (weights, bias) in enumerate(
@@ -82,7 +107,3 @@ class MLP:
                 )
             output_data.append(output)
         return output_data
-
-    def set_track_gradients_full_network(self, track_gradients: bool) -> None:
-        self.weights[-1].set_track_gradients_full_network(track_gradients)
-        self.weights[-1].set_track_gradients_full_network(track_gradients)
