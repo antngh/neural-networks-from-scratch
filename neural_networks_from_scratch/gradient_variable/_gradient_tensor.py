@@ -3,7 +3,7 @@ from __future__ import annotations
 import pprint
 from typing import Callable
 
-from neural_networks_from_scratch.gradient_variable import GradientVariable
+from ._gradient_variable import GradientVariable
 
 
 def _get_dims_from_nested_list(values: list) -> tuple[int, ...]:

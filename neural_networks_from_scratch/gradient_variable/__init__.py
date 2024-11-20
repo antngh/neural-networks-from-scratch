@@ -1,5 +1,4 @@
-from neural_networks_from_scratch.gradient_variable._gradient_variable import (
-    GradientVariable,
-)
+from ._gradient_tensor import GradientTensor
+from ._gradient_variable import GradientVariable
 
-__all__ = ["GradientVariable"]
+__all__ = ["GradientVariable", "GradientTensor"]

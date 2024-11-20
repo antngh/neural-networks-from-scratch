@@ -1,5 +1,7 @@
-from neural_networks_from_scratch.gradient_variable import GradientVariable
-from neural_networks_from_scratch.tensor import GradientTensor
+from neural_networks_from_scratch.gradient_variable import (
+    GradientTensor,
+    GradientVariable,
+)
 
 
 def _clean_y(y: list[GradientVariable | float]) -> list[GradientVariable | float]:
