@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any, Callable
 
-from ._gradient_calculations import GRAD_FUNCS, calculate_grad_numerically
+from ._gradient_calculations import GRAD_FUNCS, get_numerical_gradient_func
 
 
 class GradientVariable:
@@ -621,7 +621,8 @@ class GradientVariable:
         """
         if self.val <= 0 and (float(other) <= 0 or not float(other).is_integer()):
             raise ValueError(
-                "If GVar GradientVariable not positive, the exponent must be a positive integer"
+                "If GVar GradientVariable not positive, the exponent must be a positive"
+                " integer"
             )
 
         return self.applyfunc_two_inputs(
@@ -716,16 +717,9 @@ class GradientVariable:
         self.downstream_data.append((result, func_name, func))
         result.upstream_vars.append(self)
 
-        if func_name in self.grad_funcs:
-            return result
+        if func_name not in self.grad_funcs:
+            self.grad_funcs[func_name] = grad_func or get_numerical_gradient_func(func)
 
-        if grad_func is None:
-            grad_func = (
-                lambda self_var, downstream_var, other_var: calculate_grad_numerically(
-                    x=self_var, y=downstream_var, func=func
-                )
-            )
-        self.grad_funcs[func_name] = grad_func
         return result
 
     def applyfunc_two_inputs(
@@ -753,8 +747,8 @@ class GradientVariable:
             The function to calculate the gradient of the result with respect to self.
             If not provided, it will be calculated numerically.
         grad_func_right : Callable | None, optional
-            The function to calculate the gradient of the result with respect to the other
-            variable. If not provided, it will be calculated numerically.
+            The function to calculate the gradient of the result with respect to the
+            other variable. If not provided, it will be calculated numerically.
 
         Returns
         -------
@@ -778,22 +772,15 @@ class GradientVariable:
             result.upstream_vars.append(other)
             result.name = result.name + f"_{other.name}"
             if func_name_right not in self.grad_funcs:
-                if grad_func_right is None:
-                    lambda self_var, downstream_var, other_var: calculate_grad_numerically(
-                        x=self_var, y=downstream_var, func=lambda x: func(other_var, x)
-                    )
-                other.grad_funcs[func_name_right] = grad_func_right
+                other.grad_funcs[func_name_right] = (
+                    grad_func_right
+                    or get_numerical_gradient_func(func, other_var=other, left=False)
+                )
         else:
             result.name = result.name + f"_{other}"
 
-        if func_name_left in self.grad_funcs:
-            return result
-
-        if grad_func_left is None:
-            grad_func_left = (
-                lambda self_var, downstream_var, other_var: calculate_grad_numerically(
-                    x=self_var, y=downstream_var, func=lambda x: func(x, other_var)
-                )
+        if func_name_left not in self.grad_funcs:
+            self.grad_funcs[func_name_left] = (
+                grad_func_left
+                or get_numerical_gradient_func(func, other_var=other, left=True)
             )
-        self.grad_funcs[func_name_left] = grad_func_left
-        return result

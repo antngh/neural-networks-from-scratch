@@ -42,6 +42,43 @@ def calculate_grad_numerically(
     return (res_plus - res_minus) / diff_x
 
 
+def get_numerical_gradient_func(
+    func: Callable[[float], float] | Callable[[float, float], float],
+    other_var: float | None = None,
+    left: bool = True,
+):
+    """
+    Get a function to calculate the gradient of a function numerically.
+
+    Parameters
+    ----------
+    func : Callable[[float], float] | Callable[[float, float], float]
+        The function of which to calculate the gradient.
+        Either a unary function or a binary function.
+    other_var : float | None, optional
+        The other variable in the binary function.
+        If provided assumes that func is binary, otherwise assumes it is unary.
+    left : bool, optional
+        Whether self is the first or second variable in the binary function.
+        Is ignored if func is a unary function.
+
+    Returns
+    -------
+    Callable[[float, float, float], float]
+        The function to calculate the gradient of the function numerically.
+        Takes the self variable, the downstream variable, and the other variable,
+        and returns the gradient.
+    """
+    func = (
+        func
+        if not other_var
+        else lambda x: (func(x, other_var) if left else lambda x: func(other_var, x))
+    )
+    return lambda self_var, downstream_var, other_var: calculate_grad_numerically(
+        x=self_var, y=downstream_var, func=func
+    )
+
+
 def _grad_one(self_var: float, downstream_var: float, other_var: float) -> float:
     """
     The gradient is one regardless of the input values
