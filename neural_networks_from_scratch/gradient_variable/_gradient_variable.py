@@ -8,7 +8,11 @@ from ._gradient_calculations import GRAD_FUNCS, get_numerical_gradient_func
 
 class GradientVariable:
     """
-    A class to hold a float and track it's gradient.
+    A class to hold a float and track its gradient.
+
+    Note:
+    We only track the first order derivative but not the momentum etc, so we can do
+    gradient descent but not Adam
 
     Attributes
     ----------
@@ -784,3 +788,5 @@ class GradientVariable:
                 grad_func_left
                 or get_numerical_gradient_func(func, other_var=other, left=True)
             )
+
+        return result
