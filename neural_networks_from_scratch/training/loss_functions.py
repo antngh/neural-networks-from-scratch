@@ -9,9 +9,27 @@ def _clean_y(y: list[GradientVariable | float]) -> list[GradientVariable | float
 
 
 def mean_squared_error(
-    y_true: list[GradientVariable | float],
+    y_true: GradientTensor | list[GradientVariable | float],
     y_pred: GradientTensor | list[GradientVariable | float],
 ) -> GradientVariable:
+    """
+    Calculate the mean squared error between the true and predicted values.
+
+    The outer dimensions of the true and predicted values must match, each
+    corresponding to a data sample.
+
+    Parameters
+    ----------
+    y_true : GradientTensor | list[GradientVariable | float]
+        The true values.
+    y_pred : GradientTensor | list[GradientVariable | float]
+        The predicted values.
+
+    Returns
+    -------
+    GradientVariable
+        The mean squared error.
+    """
     return sum(
         [
             (y_p - y_t) ** 2

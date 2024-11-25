@@ -1,12 +1,37 @@
 from typing import Callable
 
 from neural_networks_from_scratch.gradient_variable import GradientTensor
-from neural_networks_from_scratch.models.model_base import GModelBase
+from neural_networks_from_scratch.models.model_base import GradientModelBase
 
 from .activation_functions import ActivationBase, Relu
 
 
-class MLP(GModelBase):
+class MLP(GradientModelBase):
+    """
+    A multi layer perceptron model (feed forward neural network).
+
+    Attributes
+    ----------
+    n_inputs : int
+        The number of inputs to the model.
+    layers : tuple[int, ...]
+        The number of nodes in each layer.
+        i.e. a 3 layer model with 2 nodes in the first hidden layer, 3 in the second
+        and 1 in the output would be (2, 3, 1).
+    name : str
+        The name of the model.
+    is_updatable : bool
+        Whether the model is updatable or not.
+    weight_value_initialiser :float | Callable[[], float]
+        The initialiser for the weights of the model.
+        Either a float or a function that returns a float.
+        By default it will be initialised with a normal distribution).
+    internal_activation_function : ActivationBase | None
+        The activation function to use for the internal connections.
+    final_activation_function : ActivationBase | None
+        The activation function to use for the final output.
+    """
+
     def __init__(
         self,
         n_inputs: int,
@@ -17,6 +42,26 @@ class MLP(GModelBase):
         internal_activation_function: ActivationBase | None = Relu(),
         final_activation_function: ActivationBase | None = None,
     ):
+        """
+        Initialise the MLP
+
+        Parameters
+        ----------
+        n_inputs : int
+            The number of inputs to the model.
+        layers : tuple[int, ...]
+            The number of nodes in each layer.
+        is_updatable : bool | None, optional
+            Whether the model is updatable or not
+        name : str | None, optional
+            The name of the model.
+        weight_initialiser : Callable | None, optional
+            The initialiser for the weights of the model.
+        internal_activation_function : ActivationBase | None
+            The activation function to use for the internal connections.
+        final_activation_function : ActivationBase | None
+            The activation function to use for the final output.
+        """
         self.n_inputs = n_inputs
         self.layers = layers
 
@@ -28,6 +73,9 @@ class MLP(GModelBase):
         )
 
     def _create_variables(self):
+        """
+        Initialise all weights and biases of the model..
+        """
         self.weights = []
         self.biases = []
         n_nodes_previous_layer = self.n_inputs
@@ -51,6 +99,21 @@ class MLP(GModelBase):
             n_nodes_previous_layer = n_nodes_layer
 
     def _activation(self, x: GradientTensor, final_layer=False) -> GradientTensor:
+        """
+        Apply the activation function to all elements of x.
+
+        Parameters
+        ----------
+        x : GradientTensor
+            The tensor to apply the activation function to
+        final_layer : bool, optional
+            Whether this is the final layer of the model.
+
+        Returns
+        -------
+        GradientTensor
+            The tensor with the activation function applied element-wise
+        """
         activation_function_obj = (
             self.final_activation_function if final_layer else self.activation_function
         )
@@ -64,6 +127,21 @@ class MLP(GModelBase):
         )
 
     def forward(self, input_data: list | GradientTensor) -> list:
+        """
+        Run the data through the model.
+
+        Defines how the network is wired up.
+
+        Parameters
+        ----------
+        input_data : list | GradientTensor
+            The input data to the model.
+
+        Returns
+        -------
+        list
+            The output of the model.
+        """
         output_data = []
         input_data = input_data if isinstance(input_data, list) else input_data.values
         for row in input_data:
@@ -72,7 +150,7 @@ class MLP(GModelBase):
                 zip(self.weights, self.biases)
             ):
                 output = self._activation(
-                    weights.vecmul(output) + bias,
+                    (weights @ output) + bias,
                     final_layer=layer_index + 1 == len(self.layers),
                 )
             output_data.append(output)
