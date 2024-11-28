@@ -348,7 +348,7 @@ class GradientTensor:
                 "Cannot have a mix of GradientVariables and floats in the tensor"
             )
         if all_are_gvars:
-            if is_updatable:
+            if is_updatable is not None:
                 raise ValueError(
                     "if values are GradientVariables, is_updatable must not be provided"
                 )

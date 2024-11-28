@@ -1,4 +1,4 @@
-from math import log
+from math import e, log
 from typing import Callable
 
 from .config import NumericDifferentiationConfig
@@ -93,6 +93,37 @@ def _grad_other_var(self_var: float, downstream_var: float, other_var: float) ->
     return other_var
 
 
+def _pow_left(
+    self_var,
+    downstream_var,
+    other_var,
+    epsilon=NumericDifferentiationConfig.numeric_diff_epsilon,
+):
+    if other_var.is_integer() or self_var >= 0:
+        return other_var * self_var ** (other_var - 1)
+
+    return calculate_grad_numerically(
+        x=self_var, y=downstream_var, func=lambda x: x**other_var, epsilon=epsilon
+    )
+
+
+def _pow_right(
+    self_var,
+    downstream_var,
+    other_var,
+    epsilon=NumericDifferentiationConfig.numeric_diff_epsilon,
+):
+    if abs(other_var - e) < epsilon:
+        return downstream_var
+
+    if other_var > 0 and self_var > 0:
+        return downstream_var * log(other_var)
+
+    return calculate_grad_numerically(
+        x=self_var, y=downstream_var, func=lambda x: other_var**x, epsilon=epsilon
+    )
+
+
 # known gradient calculations for common operations, quicker and more robust than
 # numerical differentiation
 GRAD_FUNCS = {
@@ -106,18 +137,6 @@ GRAD_FUNCS = {
     / other_var,  # d(self/other)/d(self)
     "div__right": lambda self_var, downstream_var, other_var: -other_var
     / self_var**2,  # d(other/self)/d(self)
-    "pow__left": lambda self_var, downstream_var, other_var: (  # d(self^other)/d(self)
-        (other_var * self_var ** (other_var - 1))
-        if other_var.is_integer() or self_var >= 0
-        else calculate_grad_numerically(
-            x=self_var, y=downstream_var, func=lambda x: x**other_var
-        )
-    ),
-    "pow__right": lambda self_var, downstream_var, other_var: (  # d(other^self)/d(self)
-        (other_var**self_var * log(other_var))
-        if other_var > 0 and self_var > 0
-        else calculate_grad_numerically(
-            x=self_var, y=downstream_var, func=lambda x: other_var**x
-        )
-    ),
+    "pow__left": _pow_left,  # d(self^other)/d(self)
+    "pow__right": _pow_right,  # d(other^self)/d(self)
 }
