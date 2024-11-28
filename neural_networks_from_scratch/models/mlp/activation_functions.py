@@ -1,4 +1,7 @@
+import math
 from abc import ABC, abstractmethod
+
+from neural_networks_from_scratch.gradient_variable import GradientTensor
 
 
 class ActivationBase(ABC):
@@ -73,3 +76,26 @@ class Relu(ActivationBase):
     @staticmethod
     def grad(self_var, downstream_var, other_var):
         return 1.0 if self_var > 0 else 0
+
+
+class ActivationMultipleBase(ABC):
+    """
+    A base class for activation functions that depend on a whole tensor (not just a single value)
+    """
+
+
+class Softmax(ActivationMultipleBase):
+
+    @staticmethod
+    def forward(gtensor):
+
+        err_msg = "Softmax only works on 1D tensors with at least one element"
+        if len(gtensor.dims) > 1:
+            raise ValueError(err_msg)
+
+        if not gtensor.dims[0]:
+            raise ValueError(err_msg)
+
+        exps = [math.e**x_ for x_ in gtensor.values]
+        sum_ = sum(exps)
+        return GradientTensor(values=[exp_ / sum_ for exp_ in exps])

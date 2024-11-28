@@ -3,7 +3,7 @@ from typing import Callable
 from neural_networks_from_scratch.gradient_variable import GradientTensor
 from neural_networks_from_scratch.models.model_base import GradientModelBase
 
-from .activation_functions import ActivationBase, Relu
+from .activation_functions import ActivationBase, ActivationMultipleBase, Relu
 
 
 class MLP(GradientModelBase):
@@ -39,8 +39,12 @@ class MLP(GradientModelBase):
         is_updatable: bool = True,
         name: str | None = None,
         weight_initialiser: Callable | None = None,
-        internal_activation_function: ActivationBase | None = Relu(),
-        final_activation_function: ActivationBase | None = None,
+        internal_activation_function: (
+            ActivationBase | ActivationMultipleBase | None
+        ) = Relu(),
+        final_activation_function: (
+            ActivationBase | ActivationMultipleBase | None
+        ) = None,
     ):
         """
         Initialise the MLP
@@ -120,10 +124,16 @@ class MLP(GradientModelBase):
         if activation_function_obj is None:
             return x
 
-        return x.applyfunc(
-            activation_function_obj.forward,
-            func_name=activation_function_obj.__class__.__name__,
-            grad_func=activation_function_obj.grad,
+        if isinstance(activation_function_obj, ActivationMultipleBase):
+            return activation_function_obj.forward(x)
+        elif isinstance(activation_function_obj, ActivationBase):
+            return x.applyfunc(
+                activation_function_obj.forward,
+                func_name=activation_function_obj.__class__.__name__,
+                grad_func=activation_function_obj.grad,
+            )
+        raise NotImplementedError(
+            "Activation functions must be of type ActivationBase or ActivationMultipleBase"
         )
 
     def forward(self, input_data: list | GradientTensor) -> list:
